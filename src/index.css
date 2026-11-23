@@ -857,3 +857,151 @@ button {
     margin: 18px 0;
   }
 }
+
+/* Cue Check black-and-green visual system */
+:root,
+:root[data-theme='light'] {
+  color-scheme: dark;
+  background: #080b09;
+  color: #edf7ef;
+}
+html,
+body,
+#root {
+  min-height: 100%;
+  background: #080b09;
+  color: #edf7ef;
+}
+body,
+.shell,
+.shell.light {
+  background: #080b09 !important;
+  color: #edf7ef !important;
+}
+.sidebar,
+.shell.light .sidebar {
+  background: #050806 !important;
+  border-color: #183326 !important;
+}
+.brand-mark,
+.history-icon {
+  color: #45e08a !important;
+  background: #10291c !important;
+  border-color: #245b3c !important;
+}
+.nav,
+.shell.light .nav {
+  color: #9ab5a2 !important;
+}
+.nav:hover,
+.nav.active,
+.shell.light .nav:hover,
+.shell.light .nav.active {
+  color: #65f2a0 !important;
+  background: #10291c !important;
+}
+.reminder,
+.stat,
+.settings-card,
+.check-card,
+.history-row,
+.filters button,
+.task-list,
+.shell.light .reminder,
+.shell.light .stat,
+.shell.light .settings-card,
+.shell.light .check-card,
+.shell.light .history-row,
+.shell.light .filters button,
+.shell.light .task-list {
+  background: #0d1510 !important;
+  border-color: #1d3b2a !important;
+  color: #edf7ef !important;
+}
+.topbar,
+.shell.light .topbar {
+  border-color: #183326 !important;
+}
+.welcome,
+.service-hero,
+.shell.light .welcome,
+.shell.light .service-hero {
+  background: radial-gradient(ellipse at 84% 24%, #123d27 0%, #0c1c12 42%, #090e0b 78%) !important;
+  border-color: #245b3c !important;
+}
+.primary,
+.task.done .task-check {
+  background: #39d879 !important;
+  color: #06140b !important;
+  box-shadow: 0 5px 22px #39d87924 !important;
+}
+.primary:hover {
+  background: #68ef9b !important;
+}
+.ring,
+.progress-line i,
+.live-dot,
+.eyebrow span {
+  border-color: #39d879 !important;
+  background-color: #39d879;
+}
+.tag,
+.tag.ready,
+.filters button.selected,
+.shell.light .filters button.selected {
+  color: #72efa4 !important;
+  background: #123522 !important;
+  border-color: #286342 !important;
+}
+.continue,
+.task.done .task-state,
+.saved {
+  color: #62e995 !important;
+}
+.add-item input,
+.modal input,
+.modal select,
+.settings-card input,
+.settings-card textarea,
+.shell.light .add-item input,
+.shell.light .modal input,
+.shell.light .modal select,
+.shell.light .settings-card input,
+.shell.light .settings-card textarea {
+  background: #080f0b !important;
+  border-color: #245039 !important;
+  color: #edf7ef !important;
+}
+.modal,
+.shell.light .modal {
+  background: #0d1711 !important;
+  border-color: #286342 !important;
+  color: #edf7ef !important;
+}
+.modal h2,
+.empty h3,
+.shell.light .modal h2,
+.shell.light .empty h3 {
+  color: #edf7ef !important;
+}
+.empty,
+.shell.light .empty {
+  border-color: #286342 !important;
+  color: #a9c2b1 !important;
+}
+.theme-toggle {
+  display: none !important;
+}
+.login-screen {
+  background: radial-gradient(ellipse at 50% 12%, #123d27, #050806 70%) !important;
+  color: #edf7ef !important;
+}
+.login-card {
+  background: #0d1711 !important;
+  border-color: #286342 !important;
+}
+.login-mark {
+  color: #62e995 !important;
+  background: #123522 !important;
+}
+
