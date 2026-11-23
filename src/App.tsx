@@ -21,7 +21,6 @@ import {
   LogOut,
   X,
 } from 'lucide-react';
-import { auth } from '@appdeploy/client';
 import { jsPDF } from 'jspdf';
 
 const initialItems = [
@@ -65,10 +64,6 @@ const dateLabel = d =>
     year: 'numeric',
   });
 function App() {
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [authError, setAuthError] = useState('');
-  const [authBusy, setAuthBusy] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('cuecheck-theme') || 'dark');
   const [data, setData] = useState(() => ({
     items: initialItems,
@@ -97,18 +92,9 @@ function App() {
   const [templateItemsOverride, setTemplateItemsOverride] = useState(null);
   useEffect(() => saveStore(data), [data]);
   useEffect(() => {
-    auth.getUser()
-      .then(setUser)
-      .catch(err => setAuthError(err?.message || 'Unable to restore your sign-in. Please try again.'))
-      .finally(() => setAuthLoading(false));
-  }, []);
-  useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('cuecheck-theme', theme);
   }, [theme]);
-  useEffect(() => {
-    if (user) setCheckName(user.name || user.email || '');
-  }, [user]);
   const current = data.checks.find(c => c.id === active);
   const completed = current?.entries.filter(e => e.done).length || 0;
   const pct = current
@@ -126,7 +112,7 @@ function App() {
       id: crypto.randomUUID(),
       service: service.trim() || 'Service',
       checker: checkName.trim(),
-      checkerEmail: user?.email || '',
+      checkerEmail: '',
       date: checkDate,
       time: checkTime,
       createdAt: new Date().toISOString(),
@@ -211,29 +197,6 @@ function App() {
     setPage(p);
     setActive(null);
   };
-  if (authLoading) {
-    return <div className="login-screen"><div className="login-card"><ShieldCheck size={34} /><h1>Cue Check</h1><p>Restoring your secure session…</p></div></div>;
-  }
-  if (!user) {
-    return (
-      <div className="login-screen">
-        <div className="login-card">
-          <div className="login-mark"><ShieldCheck size={28} /></div>
-          <small className="eyebrow">MEDIA READINESS</small>
-          <h1>Welcome to Cue Check</h1>
-          <p>Sign in with your email address to access service checks, activity records and PDF reports.</p>
-          {authError && <div className="login-error">{authError}</div>}
-          <button className="primary login-button" disabled={authBusy} onClick={async () => {
-            setAuthBusy(true);
-            setAuthError('');
-            try { await auth.signInWithRedirect({ scope: 'openid email profile offline_access' }); }
-            catch (err) { setAuthError(err?.message || 'Sign-in could not start. Please try again.'); setAuthBusy(false); }
-          }}>{authBusy ? 'Opening email sign-in…' : 'Continue with email'}</button>
-          <small className="login-foot">A secure email sign-in link will be sent to you.</small>
-        </div>
-      </div>
-    );
-  }
   return (
     <div className={`shell ${theme}`}>
       <aside className="sidebar">
@@ -281,8 +244,7 @@ function App() {
               {theme === 'dark' ? 'Day mode' : 'Night mode'}
             </button>
             <span className="live-dot" />
-            <span className="user-email">{user.email}</span>
-            <button className="signout-btn" onClick={async () => { await auth.signOut(); setUser(null); }} title="Sign out"><LogOut size={14} /></button>
+            <span className="user-email">Local device</span>
           </div>
         </header>
         {page === 'Run a check' && !current && (
