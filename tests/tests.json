@@ -1,0 +1,87 @@
+[
+  {
+    "name": "Email sign-in is required before opening Cue Check",
+    "sanity": true,
+    "viewport": "desktop",
+    "covers": [
+      "email-only authentication",
+      "protected app access",
+      "sign-in redirect"
+    ],
+    "description": "Verifies signed-out visitors see the email sign-in screen and cannot access the service workspace until authenticated.",
+    "steps": [
+      "Open Cue Check in a signed-out browser session",
+      "Verify the email sign-in screen is shown",
+      "Complete email sign-in"
+    ],
+    "expected": "The service workspace is only shown after successful email authentication."
+  },
+  {
+    "name": "Download a complete service activity PDF",
+    "viewport": "desktop",
+    "covers": [
+      "direct PDF download",
+      "completed and pending activities in PDF",
+      "checker name and email in PDF",
+      "service metadata in PDF"
+    ],
+    "description": "Verifies the PDF file contains the service details, checker identity, every checklist activity and its completion state.",
+    "steps": [
+      "Sign in with email",
+      "Start a service check and enter a checker name",
+      "Mark one activity complete and leave another pending",
+      "Choose Download PDF"
+    ],
+    "expected": "A PDF downloads with service name, date, start time, checker name, account email, completion percentage, status, all activities and notes."
+  },
+  {
+    "name": "Switch between day and night appearance",
+    "viewport": "desktop",
+    "covers": [
+      "day mode toggle",
+      "night mode toggle",
+      "theme preference persistence"
+    ],
+    "description": "Verifies the theme toggle changes the workspace appearance and remembers the selected mode after reload.",
+    "steps": [
+      "Sign in and open the workspace",
+      "Switch to Day mode",
+      "Refresh the page",
+      "Switch back to Night mode"
+    ],
+    "expected": "The light and dark appearances both render correctly and the selected appearance is retained after refresh."
+  },
+  {
+    "name": "Create and retain a named service check",
+    "viewport": "desktop",
+    "covers": [
+      "service check creation",
+      "checker name capture",
+      "activity completion",
+      "service history persistence"
+    ],
+    "description": "Verifies a signed-in checker can create a service check, mark activities and find the record in history after reload.",
+    "steps": [
+      "Start a service check with a checker name",
+      "Mark a checklist activity complete",
+      "Open History and refresh the page"
+    ],
+    "expected": "The saved service appears in history with its checker, date and completion count."
+  },
+  {
+    "name": "Validate checker name and keep mobile workflow usable",
+    "viewport": "mobile",
+    "covers": [
+      "required checker name validation",
+      "responsive mobile layout",
+      "mobile PDF action visibility"
+    ],
+    "description": "Verifies a service check cannot be started without a checker name and the main workflow remains usable on mobile.",
+    "steps": [
+      "Open Start a service check",
+      "Leave Name of checker empty and submit",
+      "Enter a checker name and begin the check"
+    ],
+    "expected": "The required checker name is enforced and the checklist and Download PDF action fit the mobile layout."
+  }
+]
