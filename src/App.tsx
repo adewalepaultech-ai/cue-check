@@ -11,6 +11,7 @@ import {
   FileText,
   History,
   ListChecks,
+  CalendarDays,
   Menu,
   Plus,
   Settings,
@@ -90,6 +91,10 @@ function App() {
   const [filter, setFilter] = useState('All');
   const [newItem, setNewItem] = useState('');
   const [notice, setNotice] = useState('');
+  const [programName, setProgramName] = useState('');
+  const [programTasks, setProgramTasks] = useState('');
+  const [editingProgramId, setEditingProgramId] = useState(null);
+  const [templateItemsOverride, setTemplateItemsOverride] = useState(null);
   useEffect(() => saveStore(data), [data]);
   useEffect(() => {
     auth.getUser()
@@ -126,7 +131,7 @@ function App() {
       time: checkTime,
       createdAt: new Date().toISOString(),
       ready: false,
-      entries: data.items.map((label, i) => ({
+      entries: (templateItemsOverride || data.items).map((label, i) => ({
         id: String(i),
         label,
         done: false,
@@ -135,6 +140,7 @@ function App() {
     };
     setData(d => ({ ...d, checks: [c, ...d.checks] }));
     setActive(c.id);
+    setTemplateItemsOverride(null);
     setShowNew(false);
     setPage('Run a check');
   };
@@ -245,6 +251,7 @@ function App() {
             ['Run a check', ClipboardCheck],
             ['History', History],
             ['Checklist', ListChecks],
+            ['Special Programs', CalendarDays],
             ['Settings', Settings],
           ].map(([n, I]) => (
             <button
@@ -609,6 +616,46 @@ function App() {
                 </div>
               ))}
             </div>
+          </>
+        )}
+        {page === 'Special Programs' && (
+          <>
+            <div className="page-title">
+              <small className="eyebrow">CUSTOM CONFIGURATION</small>
+              <h1>Special programs</h1>
+              <p>Create a dedicated checklist for conferences, concerts, conventions, outreaches and other special events.</p>
+            </div>
+            <div className="settings-card program-editor">
+              <h2>{editingProgramId ? 'Edit special program' : 'Configure a special program'}</h2>
+              <label>Program name
+                <input value={programName} onChange={e => setProgramName(e.target.value)} placeholder="e.g. Annual Convention 2027" />
+              </label>
+              <label>Program checklist — enter one activity per line
+                <textarea value={programTasks} onChange={e => setProgramTasks(e.target.value)} placeholder={'Test microphones and speakers\nCheck projector and screens\nConfirm livestream connection\nPrepare stage lighting'} />
+              </label>
+              <div className="program-actions">
+                <button className="primary" onClick={() => {
+                  const tasks = programTasks.split('\n').map(x => x.trim()).filter(Boolean);
+                  if (!programName.trim() || !tasks.length) return;
+                  const item = { id: editingProgramId || crypto.randomUUID(), name: programName.trim(), items: tasks };
+                  setData(d => ({ ...d, specialPrograms: editingProgramId ? (d.specialPrograms || []).map(p => p.id === editingProgramId ? item : p) : [...(d.specialPrograms || []), item] }));
+                  setProgramName(''); setProgramTasks(''); setEditingProgramId(null);
+                }}><Plus size={16} /> {editingProgramId ? 'Save changes' : 'Save program'}</button>
+                {editingProgramId && <button className="quiet" onClick={() => { setEditingProgramId(null); setProgramName(''); setProgramTasks(''); }}>Cancel edit</button>}
+              </div>
+            </div>
+            <div className="section-head"><div><small className="eyebrow">YOUR TEMPLATES</small><h2>Configured programs</h2></div></div>
+            {(data.specialPrograms || []).length === 0 ? (
+              <div className="empty"><CalendarDays size={28} /><h3>No special programs yet</h3><p>Create a program above and add the activities that should be checked for it.</p></div>
+            ) : (data.specialPrograms || []).map(p => (
+              <div className="history-row program-row" key={p.id}>
+                <div className="history-icon"><ListChecks size={18} /></div>
+                <div className="program-info"><b>{p.name}</b><small>{p.items.length} checklist activities</small></div>
+                <button className="text-btn" onClick={() => { setEditingProgramId(p.id); setProgramName(p.name); setProgramTasks(p.items.join('\n')); }}>Edit</button>
+                <button className="primary" onClick={() => { setService(p.name); setTemplateItemsOverride(p.items); setShowNew(true); }}>Use checklist</button>
+                <button className="remove" aria-label="Delete program" onClick={() => setData(d => ({ ...d, specialPrograms: (d.specialPrograms || []).filter(x => x.id !== p.id) }))}><X size={16} /></button>
+              </div>
+            ))}
           </>
         )}
         {page === 'Settings' && (
