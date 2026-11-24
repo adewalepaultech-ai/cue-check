@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   Archive,
+  LayoutDashboard,
+  ClipboardList,
+  Users,
+  Database,
+  FileSpreadsheet,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -70,6 +75,8 @@ function Workspace({ user }) {
   const [cloudError, setCloudError] = useState('');
   const [accountRole, setAccountRole] = useState(null);
   const [staffProfiles, setStaffProfiles] = useState([]);
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [backupBusy, setBackupBusy] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('cuecheck-theme') || 'dark');
   const [data, setData] = useState(() => ({
     items: initialItems,
@@ -109,6 +116,8 @@ function Workspace({ user }) {
         if (checksError) throw checksError;
         if (!alive) return;
         setAccountRole(profile?.role || 'staff');
+        const { data: auditRows, error: auditLoadError } = await supabase.from('cuecheck_audit').select('*').order('created_at', { ascending: false }).limit(300);
+        if (!auditLoadError && alive) setAuditEvents(auditRows || []);
         const local = readStore();
         if (!config && (!rows || rows.length === 0)) {
           const seedConfig = {
@@ -226,6 +235,60 @@ function Workspace({ user }) {
     setStaffProfiles(list => list.filter(item => item.id !== profile.id));
   };
   const pendingProfiles = staffProfiles.filter(profile => profile.approval_status === 'pending');
+  const writeAudit = async (action, checkId = null, details = {}) => {
+    const { data: savedEvent, error } = await supabase.from('cuecheck_audit').insert({
+      actor_id: user.id, actor_email: user.email || '', action, check_id: checkId, details,
+    }).select().single();
+    if (error) { setCloudError(error.message || 'Could not save the activity record. Apply the Cue Check audit migration.'); return; }
+    setAuditEvents(events => [savedEvent, ...events].slice(0, 300));
+  };
+  const exportBackup = async () => {
+    const backup = {
+      format: 'cuecheck-backup', version: 1, exportedAt: new Date().toISOString(), exportedBy: user.email || '',
+      config: { items: data.items, settings: data.settings, specialPrograms: data.specialPrograms || [] },
+      checks: data.checks,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = `cue-check-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    await writeAudit('backup_exported', null, { checks: data.checks.length });
+  };
+  const restoreBackup = async event => {
+    const file = event.target.files?.[0]; if (!file) return;
+    setBackupBusy(true);
+    try {
+      const backup = JSON.parse(await file.text());
+      if (backup?.format !== 'cuecheck-backup' || !Array.isArray(backup.checks) || !Array.isArray(backup.config?.items) || !backup.config?.settings)
+        throw new Error('This file is not a valid Cue Check backup.');
+      if (!window.confirm(`Restore ${backup.checks.length} service checks and checklist settings? Matching IDs will be updated; other cloud records will remain.`)) return;
+      const config = { items: backup.config.items, settings: backup.config.settings, specialPrograms: Array.isArray(backup.config.specialPrograms) ? backup.config.specialPrograms : [] };
+      const { error: configError } = await supabase.from('cuecheck_config').upsert({ id: true, data: config, updated_by: user.id });
+      if (configError) throw configError;
+      if (backup.checks.length) {
+        const rows = backup.checks.map(check => {
+          if (!check?.id || !Array.isArray(check.entries)) throw new Error('The backup contains an invalid service check.');
+          return { id: check.id, payload: { ...check, checkerEmail: check.checkerEmail || user.email || '' }, updated_by: user.id };
+        });
+        const { error: checksError } = await supabase.from('cuecheck_checks').upsert(rows);
+        if (checksError) throw checksError;
+      }
+      setData({ ...config, checks: backup.checks });
+      await writeAudit('backup_restored', null, { checks: backup.checks.length, source: file.name });
+      setNotice('Backup restored. Cloud records not included in the backup have been kept.');
+    } catch (error) { setCloudError(error.message || 'Could not restore this backup.'); }
+    finally { setBackupBusy(false); event.target.value = ''; }
+  };
+  const downloadStaffReport = () => {
+    const rows = [['Staff', 'Checks', 'Ready', 'Average completion', 'Latest service'],
+      ...staffPerformance.map(person => [person.name, person.checks, person.ready, `${person.average}%`, person.latest || ''])];
+    const csv = rows.map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url;
+    link.download = `cue-check-staff-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click(); URL.revokeObjectURL(url);
+  };
   useEffect(() => {
     // Do not sync anything until the user's role has been loaded from Supabase.
     if (!cloudReady || !accountRole) return;
@@ -256,6 +319,27 @@ function Workspace({ user }) {
     ? Math.round((completed / Math.max(current.entries.length, 1)) * 100)
     : 0;
   const canFinalize = Boolean(current && pct >= 40);
+  const dashboardMetrics = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const total = data.checks.length;
+    const ready = data.checks.filter(check => check.ready).length;
+    const average = total ? Math.round(data.checks.reduce((sum, check) => sum + (check.entries.length ? check.entries.filter(entry => entry.done).length / check.entries.length : 0), 0) / total * 100) : 0;
+    return { total, ready, open: total - ready, average,
+      delayed: data.checks.filter(check => !check.ready && check.date < today).length,
+      thisMonth: data.checks.filter(check => check.date?.slice(0, 7) === today.slice(0, 7)).length };
+  }, [data.checks]);
+  const staffPerformance = useMemo(() => {
+    const groups = new Map();
+    data.checks.forEach(check => {
+      const key = check.checkerEmail || check.checker || 'Unassigned';
+      const person = groups.get(key) || { name: check.checker || key, checks: 0, ready: 0, progressTotal: 0, latest: '' };
+      person.checks += 1; if (check.ready) person.ready += 1;
+      person.progressTotal += check.entries?.length ? check.entries.filter(entry => entry.done).length / check.entries.length : 0;
+      if (!person.latest || (check.date || '') > person.latest) person.latest = check.date || '';
+      groups.set(key, person);
+    });
+    return [...groups.values()].map(person => ({ ...person, average: person.checks ? Math.round(person.progressTotal / person.checks * 100) : 0 })).sort((a,b) => b.checks - a.checks);
+  }, [data.checks]);
   const updateCheck = patch =>
     setData(d => ({
       ...d,
@@ -281,22 +365,22 @@ function Workspace({ user }) {
       })),
     };
     setData(d => ({ ...d, checks: [c, ...d.checks] }));
+    writeAudit('service_started', c.id, { service: c.service, date: c.date, checker: c.checker });
     setActive(c.id);
     setTemplateItemsOverride(null);
     setShowNew(false);
     setPage('Run a check');
   };
-  const toggleEntry = id =>
+  const toggleEntry = id => {
+    const entry = current?.entries.find(item => item.id === id);
+    if (entry) writeAudit(entry.done ? 'task_unchecked' : 'task_completed', current.id, { task: entry.label });
     setData(d => ({
       ...d,
-      checks: d.checks.map(check =>
-        check.id === active
-          ? { ...check, entries: check.entries.map(entry =>
-              entry.id === id ? { ...entry, done: !entry.done } : entry
-            ) }
-          : check
-      ),
+      checks: d.checks.map(check => check.id === active
+        ? { ...check, entries: check.entries.map(item => item.id === id ? { ...item, done: !item.done } : item) }
+        : check),
     }));
+  };
   const updateNote = (id, note) =>
     setData(d => ({
       ...d,
@@ -338,6 +422,7 @@ function Workspace({ user }) {
     if (current.checkerEmail) addText(`Account email: ${current.checkerEmail}`);
     addText(`Progress: ${current.entries.filter(item => item.done).length}/${current.entries.length} activities completed (${pct}%)`);
     addText(`Status: ${current.ready ? 'READY' : 'IN PROGRESS'}`);
+    addText(`Outstanding activities: ${current.entries.filter(item => !item.done).length}`);
     addText(`Report generated: ${new Date().toLocaleString()}`);
     y += 3;
     pdf.setDrawColor(170);
@@ -348,6 +433,10 @@ function Workspace({ user }) {
       addText(`${index + 1}. [${item.done ? 'COMPLETED' : 'PENDING'}] ${item.label}`, 10, true);
       if (item.note?.trim()) addText(`   Note: ${item.note.trim()}`, 9);
     });
+    const outstanding = current.entries.filter(item => !item.done);
+    addText(`OUTSTANDING ACTIVITIES: ${outstanding.length}`, 11, true);
+    if (outstanding.length) outstanding.forEach(item => addText(`• ${item.label}`, 9));
+    else addText('All checklist activities are complete.', 9);
     y += 3;
     if (y > 275) { pdf.addPage(); y = 20; }
     pdf.line(left, y, left + width, y);
@@ -383,12 +472,15 @@ function Workspace({ user }) {
         </div>
         <nav>
           {[
+            ['Dashboard', LayoutDashboard],
             ['Run a check', ClipboardCheck],
+            ['Activity log', ClipboardList],
+            ['Staff reports', Users],
             ['History', History],
             ['Checklist', ListChecks],
             ['Special Programs', CalendarDays],
             ['Settings', Settings],
-          ].map(([n, I]) => (
+          ].filter(([n]) => n !== 'Staff reports' || accountRole === 'admin').map(([n, I]) => (
             <button
               className={page === n ? 'nav active' : 'nav'}
               onClick={() => go(n)}
@@ -427,6 +519,38 @@ function Workspace({ user }) {
             <button className="signout-btn" onClick={() => supabase.auth.signOut()}><LogOut size={14} /> Sign out</button>
           </div>
         </header>
+        {page === 'Dashboard' && (
+          <>
+            <div className="page-title"><small className="eyebrow">OPERATIONS OVERVIEW</small><h1>Management dashboard</h1><p>Shared service readiness across your media team.</p></div>
+            <div className="stats dashboard-stats">
+              <div className="stat"><small>TOTAL SERVICE CHECKS</small><strong>{dashboardMetrics.total}</strong><span>All recorded services</span></div>
+              <div className="stat"><small>READY SERVICES</small><strong>{dashboardMetrics.ready}</strong><span>Marked ready</span></div>
+              <div className="stat"><small>OPEN CHECKS</small><strong>{dashboardMetrics.open}</strong><span>Still in progress</span></div>
+              <div className="stat"><small>AVERAGE COMPLETION</small><strong>{dashboardMetrics.average}%</strong><span>Across all checks</span></div>
+              <div className="stat"><small>OVERDUE CHECKS</small><strong>{dashboardMetrics.delayed}</strong><span>Past date and not ready</span></div>
+              <div className="stat"><small>THIS MONTH</small><strong>{dashboardMetrics.thisMonth}</strong><span>Recorded this month</span></div>
+            </div>
+            <div className="section-head"><div><small className="eyebrow">TEAM ACTIVITY</small><h2>Recent service checks</h2></div><button className="text-btn" onClick={() => go('History')}>Full history <ChevronRight size={14} /></button></div>
+            {data.checks.slice(0, 6).map(check => {
+              const progress = check.entries?.length ? Math.round(check.entries.filter(entry => entry.done).length / check.entries.length * 100) : 0;
+              return <button className="history-row" key={check.id} onClick={() => { setPage('Run a check'); setActive(check.id); }}><div className="history-icon"><FileText size={18} /></div><div><b>{check.service} · {dateLabel(check.date)}</b><small>{check.checker} · {progress}% complete</small></div><span className={'tag ' + (check.ready ? 'ready' : '')}>{check.ready ? 'READY' : 'IN PROGRESS'}</span></button>;
+            })}
+            {!data.checks.length && <div className="empty"><ClipboardCheck size={28} /><h3>No service data yet</h3><p>Start the first service check to populate this dashboard.</p><button className="primary" onClick={() => { go('Run a check'); setShowNew(true); }}>Start a check</button></div>}
+          </>
+        )}
+        {page === 'Activity log' && (
+          <>
+            <div className="page-title"><small className="eyebrow">AUDIT TRAIL</small><h1>Activity history</h1><p>Records of service starts, checklist changes, readiness decisions and backup actions.</p></div>
+            {auditEvents.length ? auditEvents.map(event => <div className="history-row audit-row" key={event.id}><div className="history-icon"><Activity size={18} /></div><div><b>{String(event.action || '').replaceAll('_', ' ')}</b><small>{event.actor_email || 'Staff'} · {new Date(event.created_at).toLocaleString()}</small>{event.details?.task && <small>Task: {event.details.task}</small>}{event.details?.service && <small>Service: {event.details.service}</small>}</div></div>) : <div className="empty"><ClipboardList size={28} /><h3>No activity events yet</h3><p>Activity appears as staff use Cue Check. Apply the audit migration in Supabase first.</p></div>}
+          </>
+        )}
+        {page === 'Staff reports' && accountRole === 'admin' && (
+          <>
+            <div className="page-title"><small className="eyebrow">PEOPLE & PERFORMANCE</small><h1>Staff performance</h1><p>Service-check volume, readiness outcomes and average checklist completion.</p></div>
+            <div className="report-actions"><span>{staffPerformance.length} staff members with recorded checks</span><button className="primary" onClick={downloadStaffReport}><FileSpreadsheet size={16} /> Export CSV</button></div>
+            {staffPerformance.length ? staffPerformance.map(person => <div className="history-row staff-report-row" key={person.name}><div className="history-icon"><Users size={18} /></div><div className="staff-report-info"><b>{person.name}</b><small>{person.checks} checks · {person.ready} marked ready · Latest: {person.latest ? dateLabel(person.latest) : '—'}</small><div className="progress-line"><i style={{ width: person.average + '%' }} /></div></div><strong>{person.average}%</strong></div>) : <div className="empty"><Users size={28} /><h3>No staff report data yet</h3><p>Reports appear after staff complete service checks.</p></div>}
+          </>
+        )}
         {page === 'Run a check' && !current && (
           <section className="welcome">
             <div className="eyebrow">
@@ -592,10 +716,9 @@ function Workspace({ user }) {
                       setNotice(`Service readiness is locked. Complete at least 40% of this checklist first. Your current progress is ${pct}%.`);
                       return;
                     }
-                    updateCheck({
-                      ready: true,
-                      completedAt: new Date().toISOString(),
-                    });
+                    const completedAt = new Date().toISOString();
+                    updateCheck({ ready: true, completedAt });
+                    writeAudit('service_marked_ready', current.id, { service: current.service, completion: pct });
                   }}
                 >
                   <Check size={16} /> Mark service ready
@@ -640,6 +763,7 @@ function Workspace({ user }) {
                       placeholder="Add a note (optional)"
                       value={e.note}
                       onChange={ev => updateNote(e.id, ev.target.value)}
+                      onBlur={() => writeAudit('task_note_updated', current.id, { task: e.label, note: e.note })}
                     />
                   </div>
                   <span className="task-state">
@@ -826,6 +950,16 @@ function Workspace({ user }) {
               <h1>Settings</h1>
               <p>Set the details shown across your service reports.</p>
             </div>
+            {accountRole === 'admin' && (
+              <div className="settings-card backup-card">
+                <h2>Backup & recovery</h2><p>Download checklist settings, special-program templates and service records. Restore a previous backup when needed.</p>
+                <div className="backup-actions">
+                  <button className="primary" type="button" onClick={exportBackup}><Database size={16} /> Download backup</button>
+                  <label className="backup-upload"><span><UploadCloud size={16} /> {backupBusy ? 'Restoring…' : 'Restore backup'}</span><input type="file" accept="application/json,.json" disabled={backupBusy} onChange={restoreBackup} /></label>
+                </div>
+                <small className="backup-note">Restore merges records by ID and keeps other cloud records. Store downloaded backups securely.</small>
+              </div>
+            )}
             {accountRole === 'admin' && (
               <div className="settings-card admin-users">
                 <h2>Staff access management</h2>
