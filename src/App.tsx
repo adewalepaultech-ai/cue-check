@@ -88,7 +88,7 @@ function Workspace({ user }) {
     },
     ...readStore(),
   }));
-  const [page, setPage] = useState('Run a check');
+  const [page, setPage] = useState(() => sessionStorage.getItem('cuecheck-page') || 'Run a check');
   const [active, setActive] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [service, setService] = useState('Sunday Service');
@@ -104,6 +104,9 @@ function Workspace({ user }) {
   const [programTasks, setProgramTasks] = useState('');
   const [editingProgramId, setEditingProgramId] = useState(null);
   const [templateItemsOverride, setTemplateItemsOverride] = useState(null);
+  useEffect(() => {
+    sessionStorage.setItem('cuecheck-page', page);
+  }, [page]);
   useEffect(() => {
     let alive = true;
     const loadCloud = async () => {
@@ -500,6 +503,7 @@ function Workspace({ user }) {
             ['Settings', Settings],
           ].filter(([n]) => n !== 'Staff reports' || accountRole === 'admin').map(([n, I]) => (
             <button
+              type="button"
               className={page === n ? 'nav active' : 'nav'}
               onClick={() => go(n)}
               key={n}
