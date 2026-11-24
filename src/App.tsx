@@ -237,15 +237,27 @@ function Workspace({ user }) {
     setPage('Run a check');
   };
   const toggleEntry = id =>
-    updateCheck({
-      entries: current.entries.map(e =>
-        e.id === id ? { ...e, done: !e.done } : e
+    setData(d => ({
+      ...d,
+      checks: d.checks.map(check =>
+        check.id === active
+          ? { ...check, entries: check.entries.map(entry =>
+              entry.id === id ? { ...entry, done: !entry.done } : entry
+            ) }
+          : check
       ),
-    });
+    }));
   const updateNote = (id, note) =>
-    updateCheck({
-      entries: current.entries.map(e => (e.id === id ? { ...e, note } : e)),
-    });
+    setData(d => ({
+      ...d,
+      checks: d.checks.map(check =>
+        check.id === active
+          ? { ...check, entries: check.entries.map(entry =>
+              entry.id === id ? { ...entry, note } : entry
+            ) }
+          : check
+      ),
+    }));
   const download = () => {
     if (!current) return;
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -548,8 +560,9 @@ function Workspace({ user }) {
               {filtered.map(e => (
                 <div className={'task ' + (e.done ? 'done' : '')} key={e.id}>
                   <button
+                    type="button"
                     className="task-check"
-                    onClick={() => toggleEntry(e.id)}
+                    onClick={() => toggleEntry(e.id)
                   >
                     {e.done && <Check size={14} />}
                   </button>
