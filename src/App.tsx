@@ -127,11 +127,26 @@ function Workspace({ user }) {
             setData({ ...seedConfig, checks: [] });
           }
         } else {
+          let cloudRows = rows || [];
+          // Recover locally saved service checks if the shared checks table is still empty.
+          // This does not overwrite existing cloud records.
+          if (cloudRows.length === 0 && (local.checks || []).length > 0) {
+            const localRows = local.checks.map(check => ({
+              id: check.id,
+              payload: { ...check, checkerEmail: check.checkerEmail || user.email || '' },
+              updated_by: user.id,
+            }));
+            const { error: importError } = await supabase
+              .from('cuecheck_checks')
+              .upsert(localRows);
+            if (importError) throw importError;
+            cloudRows = localRows.map(row => ({ payload: row.payload }));
+          }
           setData({
             items: config?.data?.items || initialItems,
             settings: config?.data?.settings || { department: 'MEDIA DEPARTMENT', reminder: 'Start a check at least 60 minutes before doors open.' },
             specialPrograms: config?.data?.specialPrograms || [],
-            checks: (rows || []).map(row => row.payload).filter(Boolean),
+            checks: cloudRows.map(row => row.payload).filter(Boolean),
           });
         }
         setCloudReady(true);
