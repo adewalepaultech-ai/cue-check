@@ -1010,6 +1010,25 @@ function PasswordRecoveryScreen({ onComplete }) {
     <button className="primary login-button" disabled={busy}>{busy ? 'Updating…' : 'Update password'}</button>
   </form></div>;
 }
+function friendlyAuthError(error) {
+  const raw = error?.message || '';
+  const message = raw.toLowerCase();
+  if (
+    message.includes('rate limit') ||
+    message.includes('too many requests') ||
+    message.includes('over_email_send_rate_limit') ||
+    message.includes('email rate limit exceeded')
+  ) {
+    return 'Too many emails have been requested in a short time. Cue Check could not send another email yet. Please wait a while before trying again, and avoid repeatedly clicking the send button. If this keeps happening, the administrator may need to configure a custom email provider in Supabase.';
+  }
+  if (message.includes('email not confirmed')) {
+    return 'Your email address has not been verified yet. Open the confirmation link sent to your inbox, then return here to sign in.';
+  }
+  if (message.includes('invalid login credentials')) {
+    return 'The email or password is incorrect. Check your details or use Forgot password to reset your password.';
+  }
+  return raw || 'Unable to continue. Please try again.';
+}
 function AuthScreen({ verifiedNotice = false }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -1047,7 +1066,7 @@ function AuthScreen({ verifiedNotice = false }) {
         const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;
       }
-    } catch (e) { setError(e.message || 'Unable to continue.'); }
+    } catch (e) { setError(friendlyAuthError(e)); }
     finally { setBusy(false); }
   };
   const switchMode = mode => {
