@@ -31,15 +31,16 @@ Never put a Supabase secret or service-role key in frontend environment variable
 3. Run `supabase/migrations/202611240002_admin_role_management.sql`.
 4. Complete the account-approval setup used by this project, including the `cuecheck_is_approved()` function.
 5. Run `supabase/migrations/202611240003_admin_only_config.sql`. This makes shared checklist templates read-only for approved staff and writable only by administrators.
-6. In Supabase Authentication, invite the owner account (or create it using the approved account workflow).
-7. Promote the owner account by running this SQL with the exact account email:
+6. Run `supabase/migrations/202611240004_approved_users_only_checks.sql`. This blocks pending and rejected accounts from reading or changing shared service records at the database level.
+7. In Supabase Authentication, invite the owner account (or create it using the approved account workflow).
+8. Promote the owner account by running this SQL with the exact account email:
    ```sql
    update public.cuecheck_profiles
    set role = 'admin'
    where email = 'owner@example.com';
    ```
-8. Invite staff from Supabase Authentication > Users. Staff accounts receive the `staff` role automatically.
-9. In Vercel, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured for Production, Preview and Development, then redeploy.
+9. Invite staff from Supabase Authentication > Users. Staff accounts receive the `staff` role automatically.
+10. In Vercel, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured for Production, Preview and Development, then redeploy.
 
 The first successful login on a browser that contains old Cue Check local data migrates that browser's saved checklist, special-program templates, settings and service checks into the shared database if the cloud workspace is still empty. Keep the old browser data until migration is verified.
 
