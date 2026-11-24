@@ -68,6 +68,7 @@ function Workspace({ user }) {
   const [cloudReady, setCloudReady] = useState(false);
   const [cloudError, setCloudError] = useState('');
   const [accountRole, setAccountRole] = useState('staff');
+  const [staffProfiles, setStaffProfiles] = useState([]);
   const [theme, setTheme] = useState(() => localStorage.getItem('cuecheck-theme') || 'dark');
   const [data, setData] = useState(() => ({
     items: initialItems,
@@ -151,6 +152,19 @@ function Workspace({ user }) {
       .subscribe();
     return () => { alive = false; supabase.removeChannel(channel); };
   }, [user.id]);
+  useEffect(() => {
+    if (accountRole !== 'admin') return;
+    let alive = true;
+    supabase.from('cuecheck_profiles').select('id,email,role').order('email').then(({ data, error }) => {
+      if (alive && !error) setStaffProfiles(data || []);
+    });
+    return () => { alive = false; };
+  }, [accountRole]);
+  const changeStaffRole = async (id, role) => {
+    const { error } = await supabase.from('cuecheck_profiles').update({ role }).eq('id', id);
+    if (error) setCloudError(error.message);
+    else setStaffProfiles(list => list.map(profile => profile.id === id ? { ...profile, role } : profile));
+  };
   useEffect(() => {
     if (!cloudReady) return;
     saveStore(data);
@@ -707,6 +721,22 @@ function Workspace({ user }) {
               <h1>Settings</h1>
               <p>Set the details shown across your service reports.</p>
             </div>
+            {accountRole === 'admin' && (
+              <div className="settings-card admin-users">
+                <h2>Staff access management</h2>
+                <p>Invite new staff from Supabase Authentication, then manage their Cue Check role here.</p>
+                <a className="primary invite-link" href="https://supabase.com/dashboard/project/rfshmuxjfnhcvnmqixup/auth/users" target="_blank" rel="noreferrer">Open staff invitations</a>
+                {staffProfiles.map(profile => (
+                  <div className="staff-row" key={profile.id}>
+                    <span>{profile.email || profile.id}</span>
+                    <select value={profile.role} onChange={event => changeStaffRole(profile.id, event.target.value)}>
+                      <option value="staff">Staff</option>
+                      <option value="admin">Administrator</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="settings-card">
               <label>
                 Department name
