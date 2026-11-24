@@ -156,11 +156,26 @@ function Workspace({ user }) {
     };
     loadCloud();
     const channel = supabase.channel('cuecheck-live-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cuecheck_checks' }, async () => {
-        const { data: rows } = await supabase.from('cuecheck_checks').select('id,payload').order('created_at', { ascending: false });
-        if (alive && rows) setData(current => ({ ...current, checks: rows.map(row => row.payload).filter(Boolean) }));
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cuecheck_checks' }, payload => {
+        if (!alive) return;
+        // Our own writes are already reflected in local state. Re-fetching the
+        // whole table here can replace a fresh click with an older snapshot.
+        const row = payload.new;
+        if (row?.updated_by === user.id) return;
+        if (payload.eventType === 'DELETE') {
+          const deletedId = payload.old?.id;
+          if (deletedId) setData(current => ({ ...current, checks: current.checks.filter(check => check.id !== deletedId) }));
+          return;
+        }
+        if (row?.id && row?.payload) {
+          setData(current => ({
+            ...current,
+            checks: [row.payload, ...current.checks.filter(check => check.id !== row.id)],
+          }));
+        }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cuecheck_config' }, async () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cuecheck_config' }, async payload => {
+        if (!alive || payload.new?.updated_by === user.id) return;
         const { data: config } = await supabase.from('cuecheck_config').select('data').eq('id', true).maybeSingle();
         if (alive && config?.data) setData(current => ({ ...current, ...config.data }));
       })
