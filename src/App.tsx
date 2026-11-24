@@ -1122,7 +1122,7 @@ function Workspace({ user }) {
             <div className="modal-head">
               <div>
                 <small className="eyebrow">ACTION REQUIRED</small>
-                <h2 id="threshold-title">40% completion required</h2>
+                <h2 id="threshold-title">{notice.includes('40%') ? '40% completion required' : 'Backup restored'}</h2>
                 <p>{notice}</p>
               </div>
               <button type="button" className="icon-btn" aria-label="Close message" onClick={() => setNotice('')}><X /></button>
