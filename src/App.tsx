@@ -185,16 +185,33 @@ function Workspace({ user }) {
   useEffect(() => {
     if (accountRole !== 'admin') return;
     let alive = true;
-    supabase.from('cuecheck_profiles').select('id,email,role').order('email').then(({ data, error }) => {
-      if (alive && !error) setStaffProfiles(data || []);
-    });
-    return () => { alive = false; };
-  }, [accountRole]);
+    const loadProfiles = async () => {
+      const { data, error } = await supabase
+        .from('cuecheck_profiles')
+        .select('id,email,role,approval_status')
+        .order('email');
+      if (!alive) return;
+      if (error) setCloudError(error.message);
+      else setStaffProfiles(data || []);
+    };
+    loadProfiles();
+    const channel = supabase
+      .channel(`cuecheck-admin-profiles-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cuecheck_profiles' }, loadProfiles)
+      .subscribe();
+    return () => { alive = false; supabase.removeChannel(channel); };
+  }, [accountRole, user.id]);
   const changeStaffRole = async (id, role) => {
     const { error } = await supabase.from('cuecheck_profiles').update({ role }).eq('id', id);
     if (error) setCloudError(error.message);
     else setStaffProfiles(list => list.map(profile => profile.id === id ? { ...profile, role } : profile));
   };
+  const changeApprovalStatus = async (id, approval_status) => {
+    const { error } = await supabase.from('cuecheck_profiles').update({ approval_status }).eq('id', id);
+    if (error) setCloudError(error.message);
+    else setStaffProfiles(list => list.map(profile => profile.id === id ? { ...profile, approval_status } : profile));
+  };
+  const pendingProfiles = staffProfiles.filter(profile => profile.approval_status === 'pending');
   useEffect(() => {
     if (!cloudReady) return;
     saveStore(data);
@@ -383,6 +400,11 @@ function Workspace({ user }) {
               {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
               {theme === 'dark' ? 'Day mode' : 'Night mode'}
             </button>
+            {accountRole === 'admin' && pendingProfiles.length > 0 && (
+              <button className="pending-alert" onClick={() => go('Settings')} title="Review pending staff registrations">
+                {pendingProfiles.length} pending approval{pendingProfiles.length === 1 ? '' : 's'}
+              </button>
+            )}
             <span className="live-dot" />
             <span className="user-email">{user.email} · {accountRole}</span>
             <button className="signout-btn" onClick={() => supabase.auth.signOut()}><LogOut size={14} /> Sign out</button>
@@ -778,11 +800,32 @@ function Workspace({ user }) {
             {accountRole === 'admin' && (
               <div className="settings-card admin-users">
                 <h2>Staff access management</h2>
-                <p>Invite new staff from Supabase Authentication, then manage their Cue Check role here.</p>
-                <a className="primary invite-link" href="https://supabase.com/dashboard/project/rfshmuxjfnhcvnmqixup/auth/users" target="_blank" rel="noreferrer">Open staff invitations</a>
+                <p>Review new registration requests and control who can enter the shared Cue Check workspace.</p>
+                <div className="approval-summary">
+                  <strong>{pendingProfiles.length}</strong>
+                  <span>pending registration{pendingProfiles.length === 1 ? '' : 's'}</span>
+                </div>
+                {pendingProfiles.length === 0 ? (
+                  <p className="approval-empty">There are no pending registration requests.</p>
+                ) : pendingProfiles.map(profile => (
+                  <div className="staff-row approval-row" key={profile.id}>
+                    <div className="staff-identity">
+                      <b>{profile.email || profile.id}</b>
+                      <small>Awaiting administrator approval</small>
+                    </div>
+                    <div className="approval-actions">
+                      <button className="approve-btn" onClick={() => changeApprovalStatus(profile.id, 'approved')}>Approve</button>
+                      <button className="reject-btn" onClick={() => changeApprovalStatus(profile.id, 'rejected')}>Reject</button>
+                    </div>
+                  </div>
+                ))}
+                <h3 className="staff-list-title">All registered accounts</h3>
                 {staffProfiles.map(profile => (
                   <div className="staff-row" key={profile.id}>
-                    <span>{profile.email || profile.id}</span>
+                    <div className="staff-identity">
+                      <b>{profile.email || profile.id}</b>
+                      <small className={`approval-status ${profile.approval_status || 'pending'}`}>{profile.approval_status || 'pending'}</small>
+                    </div>
                     <select value={profile.role} onChange={event => changeStaffRole(profile.id, event.target.value)}>
                       <option value="staff">Staff</option>
                       <option value="admin">Administrator</option>
@@ -954,6 +997,7 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [verifiedNotice, setVerifiedNotice] = useState(false);
+  const [profileAccess, setProfileAccess] = useState({ loading: false, status: null, role: null, error: '' });
   useEffect(() => {
     let alive = true;
     supabase.auth.getSession().then(({ data }) => {
@@ -966,11 +1010,56 @@ function App() {
     });
     return () => { alive = false; listener.subscription.unsubscribe(); };
   }, []);
+  useEffect(() => {
+    let alive = true;
+    if (!session?.user?.id) {
+      setProfileAccess({ loading: false, status: null, role: null, error: '' });
+      return () => { alive = false; };
+    }
+    setProfileAccess({ loading: true, status: null, role: null, error: '' });
+    supabase.from('cuecheck_profiles')
+      .select('approval_status,role')
+      .eq('id', session.user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) setProfileAccess({ loading: false, status: null, role: null, error: error.message });
+        else if (!data) setProfileAccess({ loading: false, status: 'missing', role: null, error: '' });
+        else setProfileAccess({ loading: false, status: data.approval_status, role: data.role, error: '' });
+      });
+    return () => { alive = false; };
+  }, [session?.user?.id]);
   if (authLoading) return <div className="login-screen"><div className="login-card">Loading Cue Check…</div></div>;
   if (recoveryMode) return <PasswordRecoveryScreen onComplete={() => setRecoveryMode(false)} />;
-  return session
-    ? <Workspace user={session.user} />
-    : <AuthScreen verifiedNotice={verifiedNotice} />;
+  if (!session) return <AuthScreen verifiedNotice={verifiedNotice} />;
+  if (profileAccess.loading) return <div className="login-screen"><div className="login-card">Checking your Cue Check access…</div></div>;
+  if (profileAccess.error || profileAccess.status === 'missing') {
+    return <ApprovalStatusScreen status="unavailable" detail={profileAccess.error || 'Your account profile has not been created yet. Please contact the administrator.'} />;
+  }
+  if (profileAccess.role !== 'admin' && profileAccess.status !== 'approved') {
+    return <ApprovalStatusScreen status={profileAccess.status || 'pending'} />;
+  }
+  return <Workspace user={session.user} />;
+}
+function ApprovalStatusScreen({ status, detail = '' }) {
+  const rejected = status === 'rejected';
+  const unavailable = status === 'unavailable';
+  return (
+    <div className="login-screen">
+      <div className="login-card approval-card">
+        <div className="login-mark"><ShieldCheck size={28} /></div>
+        <small className="eyebrow">CUE CHECK ACCESS</small>
+        <h1>{rejected ? 'Registration not approved' : unavailable ? 'Access could not be checked' : 'Awaiting administrator approval'}</h1>
+        <p>{rejected
+          ? 'Your registration request was not approved. Please contact the Cue Check administrator if you believe this is a mistake.'
+          : unavailable
+            ? detail
+            : 'Your email account is registered, but an administrator must approve your access before you can use the shared checklists.'}</p>
+        {!rejected && !unavailable && <div className="approval-waiting">Your request is safely recorded. You can sign out while it is being reviewed.</div>}
+        <button className="primary login-button" onClick={() => supabase.auth.signOut()}>Sign out</button>
+      </div>
+    </div>
+  );
 }
 function PasswordRecoveryScreen({ onComplete }) {
   const [password, setPassword] = useState('');
@@ -1055,9 +1144,9 @@ function AuthScreen({ verifiedNotice = false }) {
         });
         if (signupError) throw signupError;
         if (data.session) {
-          setMessage('Your staff account has been created. You can now access Cue Check.');
+          setMessage('Your account has been created. Cue Check will check its approval status before granting access.');
         } else {
-          setMessage('Your account request has been received. Check your email for a confirmation link. After verifying, return here to sign in.');
+          setMessage('Your registration has been received. Verify your email, then sign in. An administrator must approve your access before you can use Cue Check.');
           setSignupMode(false);
           setPassword('');
           setConfirmPassword('');
