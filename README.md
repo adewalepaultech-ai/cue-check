@@ -54,7 +54,7 @@ The first successful login on a browser that contains old Cue Check local data m
 - The Supabase publishable key is intended for browser use; database access is controlled by Row Level Security.
 - Do not expose database passwords, secret keys or service-role keys.
 - Approved staff can read shared checklist configuration but cannot create, edit or delete templates.
-- Approved staff can create and update shared service checks; administrators can also manage checklist templates.
+- Approved staff can create and update shared service checks; only administrators can delete service records or manage checklist templates.
 - Administrators can view staff profiles, approve or reject registrations, and change staff/admin roles.
 - Audit entries are append-only; staff can read their own entries and administrators can read all entries.
 - Backup restore updates matching record IDs and leaves other cloud records untouched. Keep downloaded backups in a secure location.
