@@ -243,6 +243,14 @@ function Workspace({ user }) {
     if (error) { setCloudError(error.message || 'Could not save the activity record. Apply the Cue Check audit migration.'); return; }
     setAuditEvents(events => [savedEvent, ...events].slice(0, 300));
   };
+  const deleteServiceCheck = async check => {
+    if (accountRole !== 'admin' || !check) return;
+    if (!window.confirm(`Delete the ${check.service} record dated ${dateLabel(check.date)}? This cannot be undone.`)) return;
+    const { error } = await supabase.from('cuecheck_checks').delete().eq('id', check.id);
+    if (error) { setCloudError(error.message || 'Could not delete this service record.'); return; }
+    setData(currentData => ({ ...currentData, checks: currentData.checks.filter(item => item.id !== check.id) }));
+    await writeAudit('service_record_deleted', null, { checkId: check.id, service: check.service, date: check.date });
+  };
   const exportBackup = async () => {
     const backup = {
       format: 'cuecheck-backup', version: 1, exportedAt: new Date().toISOString(), exportedBy: user.email || '',
@@ -811,32 +819,24 @@ function Workspace({ user }) {
               </div>
             ) : (
               data.checks.map(c => (
-                <button
-                  className="history-row"
-                  key={c.id}
-                  onClick={() => {
-                    setPage('Run a check');
-                    setActive(c.id);
-                  }}
-                >
-                  <div className="history-icon">
-                    <FileText size={18} />
-                  </div>
-                  <div>
-                    <b>
-                      {c.service} · {dateLabel(c.date)}
-                    </b>
-                    <small>
-                      {c.time} · Checked by {c.checker} ·{' '}
-                      {c.entries.filter(e => e.done).length}/{c.entries.length}{' '}
-                      completed
-                    </small>
-                  </div>
-                  <span className={'tag ' + (c.ready ? 'ready' : '')}>
-                    {c.ready ? 'READY' : 'IN PROGRESS'}
-                  </span>
-                  <ChevronRight size={16} />
-                </button>
+                <div className="history-entry" key={c.id}>
+                  <button
+                    className="history-row"
+                    onClick={() => {
+                      setPage('Run a check');
+                      setActive(c.id);
+                    }}
+                  >
+                    <div className="history-icon"><FileText size={18} /></div>
+                    <div>
+                      <b>{c.service} · {dateLabel(c.date)}</b>
+                      <small>{c.time} · Checked by {c.checker} · {c.entries.filter(e => e.done).length}/{c.entries.length} completed</small>
+                    </div>
+                    <span className={'tag ' + (c.ready ? 'ready' : '')}>{c.ready ? 'READY' : 'IN PROGRESS'}</span>
+                    <ChevronRight size={16} />
+                  </button>
+                  {accountRole === 'admin' && <button className="remove history-delete" type="button" onClick={() => deleteServiceCheck(c)} title="Delete service record" aria-label={`Delete ${c.service} record`}><Trash2 size={16} /></button>}
+                </div>
               ))
             )}
           </>
