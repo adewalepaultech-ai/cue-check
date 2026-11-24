@@ -966,10 +966,12 @@ function App() {
 function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [resetMode, setResetMode] = useState(false);
+  const [signupMode, setSignupMode] = useState(false);
   const submit = async event => {
     event.preventDefault(); setBusy(true); setError(''); setMessage('');
     try {
@@ -977,25 +979,51 @@ function AuthScreen() {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
         if (resetError) throw resetError;
         setMessage('Password reset instructions have been sent if this email is registered.');
+      } else if (signupMode) {
+        if (password.length < 8) throw new Error('Use a password with at least 8 characters.');
+        if (password !== confirmPassword) throw new Error('The passwords do not match.');
+        const { data, error: signupError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: window.location.origin },
+        });
+        if (signupError) throw signupError;
+        if (data.session) {
+          setMessage('Your staff account has been created. You can now access Cue Check.');
+        } else {
+          setMessage('Your account request has been received. Check your email for a confirmation link before signing in.');
+          setSignupMode(false);
+          setPassword('');
+          setConfirmPassword('');
+        }
       } else {
         const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;
       }
-    } catch (e) { setError(e.message || 'Unable to sign in.'); }
+    } catch (e) { setError(e.message || 'Unable to continue.'); }
     finally { setBusy(false); }
+  };
+  const switchMode = mode => {
+    setResetMode(mode === 'reset');
+    setSignupMode(mode === 'signup');
+    setError(''); setMessage(''); setPassword(''); setConfirmPassword('');
   };
   return <div className="login-screen"><form className="login-card" onSubmit={submit}>
     <div className="login-mark"><ShieldCheck size={28} /></div>
     <small className="eyebrow">MEDIA READINESS</small>
     <h1>Cue Check</h1>
-    <p>{resetMode ? 'Enter your account email and we will send password reset instructions.' : 'Sign in with your staff email and password to access shared service records.'}</p>
+    <p>{resetMode ? 'Enter your account email and we will send password reset instructions.' : signupMode ? 'Create your staff account to access the shared Cue Check workspace.' : 'Sign in with your staff email and password to access shared service records.'}</p>
     <label className="auth-label">Email address<input type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" /></label>
-    {!resetMode && <label className="auth-label">Password<input type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Your password" /></label>}
+    {!resetMode && <label className="auth-label">Password<input type="password" required minLength={8} autoComplete={signupMode ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} placeholder={signupMode ? 'At least 8 characters' : 'Your password'} /></label>}
+    {signupMode && <label className="auth-label">Confirm password<input type="password" required minLength={8} autoComplete="new-password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Enter password again" /></label>}
     {error && <div className="login-error">{error}</div>}
     {message && <div className="login-success">{message}</div>}
-    <button className="primary login-button" disabled={busy}>{busy ? 'Please wait…' : resetMode ? 'Send reset email' : 'Sign in'}</button>
-    <button type="button" className="auth-link" onClick={() => { setResetMode(v => !v); setError(''); setMessage(''); }}>{resetMode ? 'Back to sign in' : 'Forgot password?'}</button>
-    <small className="login-foot">Staff accounts are created by the Cue Check administrator.</small>
+    <button className="primary login-button" disabled={busy}>{busy ? 'Please wait…' : resetMode ? 'Send reset email' : signupMode ? 'Create staff account' : 'Sign in'}</button>
+    {resetMode ? <button type="button" className="auth-link" onClick={() => switchMode('login')}>Back to sign in</button> : <>
+      <button type="button" className="auth-link" onClick={() => switchMode(signupMode ? 'login' : 'signup')}>{signupMode ? 'Already have an account? Sign in' : 'New staff member? Create account'}</button>
+      {!signupMode && <button type="button" className="auth-link" onClick={() => switchMode('reset')}>Forgot password?</button>}
+    </>}
+    <small className="login-foot">New accounts are assigned the staff role. Administrator access is managed by the Cue Check administrator.</small>
   </form></div>;
 }
 export default App;
