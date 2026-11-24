@@ -221,6 +221,7 @@ function Workspace({ user }) {
   const pct = current
     ? Math.round((completed / Math.max(current.entries.length, 1)) * 100)
     : 0;
+  const canFinalize = Boolean(current && pct >= 40);
   const updateCheck = patch =>
     setData(d => ({
       ...d,
@@ -274,7 +275,7 @@ function Workspace({ user }) {
       ),
     }));
   const download = () => {
-    if (!current) return;
+    if (!current || !canFinalize) return;
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const left = 16;
     const width = 178;
@@ -540,12 +541,15 @@ function Workspace({ user }) {
               {!current.ready && (
                 <button
                   className="primary ready-btn"
-                  onClick={() =>
+                  disabled={!canFinalize}
+                  title={!canFinalize ? 'Complete at least 40% of the checklist first.' : 'Mark this service ready'}
+                  onClick={() => {
+                    if (!canFinalize) return;
                     updateCheck({
                       ready: true,
                       completedAt: new Date().toISOString(),
-                    })
-                  }
+                    });
+                  }}
                 >
                   <Check size={16} /> Mark service ready
                 </button>
@@ -600,8 +604,9 @@ function Workspace({ user }) {
             <div className="report-actions">
               <span>
                 Checked by <b>{current.checker}</b>
+                {!canFinalize && <small className="threshold-hint">Complete at least 40% to unlock service readiness and PDF download.</small>}
               </span>
-              <button className="primary" onClick={download}>
+              <button className="primary" onClick={download} disabled={!canFinalize} title={!canFinalize ? 'Complete at least 40% of the checklist first.' : 'Download service report'}>
                 <Download size={16} /> Download PDF
               </button>
             </div>
