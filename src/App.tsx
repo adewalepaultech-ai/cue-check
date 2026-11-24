@@ -68,7 +68,7 @@ const dateLabel = d =>
 function Workspace({ user }) {
   const [cloudReady, setCloudReady] = useState(false);
   const [cloudError, setCloudError] = useState('');
-  const [accountRole, setAccountRole] = useState('staff');
+  const [accountRole, setAccountRole] = useState(null);
   const [staffProfiles, setStaffProfiles] = useState([]);
   const [theme, setTheme] = useState(() => localStorage.getItem('cuecheck-theme') || 'dark');
   const [data, setData] = useState(() => ({
@@ -227,7 +227,8 @@ function Workspace({ user }) {
   };
   const pendingProfiles = staffProfiles.filter(profile => profile.approval_status === 'pending');
   useEffect(() => {
-    if (!cloudReady) return;
+    // Do not sync anything until the user's role has been loaded from Supabase.
+    if (!cloudReady || !accountRole) return;
     saveStore(data);
     const persist = async () => {
       const config = { items: data.items, settings: data.settings, specialPrograms: data.specialPrograms || [] };
