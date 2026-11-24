@@ -562,7 +562,7 @@ function Workspace({ user }) {
                   <button
                     type="button"
                     className="task-check"
-                    onClick={() => toggleEntry(e.id)
+                    onClick={() => toggleEntry(e.id)}
                   >
                     {e.done && <Check size={14} />}
                   </button>
