@@ -116,8 +116,10 @@ function Workspace({ user }) {
             settings: local.settings || { department: 'MEDIA DEPARTMENT', reminder: 'Start a check at least 60 minutes before doors open.' },
             specialPrograms: local.specialPrograms || [],
           };
-          const { error: seedError } = await supabase.from('cuecheck_config').upsert({ id: true, data: seedConfig, updated_by: user.id });
-          if (seedError) throw seedError;
+          if (profile?.role === 'admin') {
+            const { error: seedError } = await supabase.from('cuecheck_config').upsert({ id: true, data: seedConfig, updated_by: user.id });
+            if (seedError) throw seedError;
+          }
           if ((local.checks || []).length) {
             const { error: seedChecksError } = await supabase.from('cuecheck_checks').upsert(
               local.checks.map(check => ({ id: check.id, payload: { ...check, checkerEmail: check.checkerEmail || user.email || '' }, updated_by: user.id }))
@@ -230,7 +232,9 @@ function Workspace({ user }) {
     const persist = async () => {
       const config = { items: data.items, settings: data.settings, specialPrograms: data.specialPrograms || [] };
       const [{ error: configError }, { error: checksError }] = await Promise.all([
-        supabase.from('cuecheck_config').upsert({ id: true, data: config, updated_by: user.id }),
+        accountRole === 'admin'
+          ? supabase.from('cuecheck_config').upsert({ id: true, data: config, updated_by: user.id })
+          : Promise.resolve({ error: null }),
         data.checks.length
           ? supabase.from('cuecheck_checks').upsert(data.checks.map(check => ({ id: check.id, payload: { ...check, checkerEmail: check.checkerEmail || user.email || '' }, updated_by: user.id })))
           : Promise.resolve({ error: null }),
@@ -240,7 +244,7 @@ function Workspace({ user }) {
     };
     const timer = window.setTimeout(persist, 350);
     return () => window.clearTimeout(timer);
-  }, [data, cloudReady, user.id, user.email]);
+  }, [data, cloudReady, user.id, user.email, accountRole]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('cuecheck-theme', theme);
@@ -441,9 +445,11 @@ function Workspace({ user }) {
               <button className="primary" onClick={() => setShowNew(true)}>
                 <Plus size={16} /> Start a service check
               </button>
-              <button className="quiet" onClick={() => go('Checklist')}>
-                Edit checklist <ChevronRight size={15} />
-              </button>
+              {accountRole === 'admin' && (
+                <button className="quiet" onClick={() => go('Checklist')}>
+                  Edit checklist <ChevronRight size={15} />
+                </button>
+              )}
             </div>
             <div className="welcome-orb" />
           </section>
@@ -719,44 +725,50 @@ function Workspace({ user }) {
                 started.
               </p>
             </div>
-            <div className="add-item">
-              <input
-                value={newItem}
-                onChange={e => setNewItem(e.target.value)}
-                placeholder="Add a checklist activity..."
-              />
-              <button
-                className="primary"
-                onClick={() => {
-                  if (newItem.trim()) {
-                    setData(d => ({
-                      ...d,
-                      items: [...d.items, newItem.trim()],
-                    }));
-                    setNewItem('');
-                  }
-                }}
-              >
-                <Plus size={16} /> Add activity
-              </button>
-            </div>
+            {accountRole === 'admin' ? (
+              <div className="add-item">
+                <input
+                  value={newItem}
+                  onChange={e => setNewItem(e.target.value)}
+                  placeholder="Add a checklist activity..."
+                />
+                <button
+                  className="primary"
+                  onClick={() => {
+                    if (newItem.trim()) {
+                      setData(d => ({
+                        ...d,
+                        items: [...d.items, newItem.trim()],
+                      }));
+                      setNewItem('');
+                    }
+                  }}
+                >
+                  <Plus size={16} /> Add activity
+                </button>
+              </div>
+            ) : (
+              <p className="saved">This checklist is managed by the administrator. You can view it and complete its tasks during a service check.</p>
+            )}
             <div className="task-list">
               {data.items.map((item, i) => (
                 <div className="task" key={i}>
                   <div className="task-main">
                     <span>{item}</span>
                   </div>
-                  <button
-                    className="remove"
-                    onClick={() =>
-                      setData(d => ({
-                        ...d,
-                        items: d.items.filter((_, j) => j !== i),
-                      }))
-                    }
-                  >
-                    <X size={16} />
-                  </button>
+                  {accountRole === 'admin' && (
+                    <button
+                      className="remove"
+                      onClick={() =>
+                        setData(d => ({
+                          ...d,
+                          items: d.items.filter((_, j) => j !== i),
+                        }))
+                      }
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -769,6 +781,7 @@ function Workspace({ user }) {
               <h1>Special programs</h1>
               <p>Create a dedicated checklist for conferences, concerts, conventions, outreaches and other special events.</p>
             </div>
+            {accountRole === 'admin' ? (
             <div className="settings-card program-editor">
               <h2>{editingProgramId ? 'Edit special program' : 'Configure a special program'}</h2>
               <label>Program name
@@ -788,6 +801,9 @@ function Workspace({ user }) {
                 {editingProgramId && <button className="quiet" onClick={() => { setEditingProgramId(null); setProgramName(''); setProgramTasks(''); }}>Cancel edit</button>}
               </div>
             </div>
+            ) : (
+              <p className="saved">Special program templates are managed by the administrator. You can still use an existing template to start a check.</p>
+            )}
             <div className="section-head"><div><small className="eyebrow">YOUR TEMPLATES</small><h2>Configured programs</h2></div></div>
             {(data.specialPrograms || []).length === 0 ? (
               <div className="empty"><CalendarDays size={28} /><h3>No special programs yet</h3><p>Create a program above and add the activities that should be checked for it.</p></div>
@@ -795,9 +811,9 @@ function Workspace({ user }) {
               <div className="history-row program-row" key={p.id}>
                 <div className="history-icon"><ListChecks size={18} /></div>
                 <div className="program-info"><b>{p.name}</b><small>{p.items.length} checklist activities</small></div>
-                <button className="text-btn" onClick={() => { setEditingProgramId(p.id); setProgramName(p.name); setProgramTasks(p.items.join('\n')); }}>Edit</button>
+                {accountRole === 'admin' && <button className="text-btn" onClick={() => { setEditingProgramId(p.id); setProgramName(p.name); setProgramTasks(p.items.join('\n')); }}>Edit</button>}
                 <button className="primary" onClick={() => { setService(p.name); setTemplateItemsOverride(p.items); setShowNew(true); }}>Use checklist</button>
-                <button className="remove" aria-label="Delete program" onClick={() => setData(d => ({ ...d, specialPrograms: (d.specialPrograms || []).filter(x => x.id !== p.id) }))}><X size={16} /></button>
+                {accountRole === 'admin' && <button className="remove" aria-label="Delete program" onClick={() => setData(d => ({ ...d, specialPrograms: (d.specialPrograms || []).filter(x => x.id !== p.id) }))}><X size={16} /></button>}
               </div>
             ))}
           </>
@@ -856,6 +872,7 @@ function Workspace({ user }) {
                 Department name
                 <input
                   value={data.settings.department}
+                  readOnly={accountRole !== 'admin'}
                   onChange={e =>
                     setData(d => ({
                       ...d,
@@ -868,6 +885,7 @@ function Workspace({ user }) {
                 Reminder message
                 <textarea
                   value={data.settings.reminder}
+                  readOnly={accountRole !== 'admin'}
                   onChange={e =>
                     setData(d => ({
                       ...d,
@@ -877,7 +895,7 @@ function Workspace({ user }) {
                 />
               </label>
               <p className="saved">
-                <CheckCircle2 size={15} /> Changes save automatically and are shared with authorised staff.
+                <CheckCircle2 size={15} /> {accountRole === 'admin' ? 'Changes save automatically and are shared with authorised staff.' : 'These settings are read-only. Contact the administrator to request a change.'}
               </p>
             </div>
           </>
