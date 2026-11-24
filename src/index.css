@@ -869,3 +869,13 @@ button {
  .program-row { flex-wrap:wrap; }
  .program-info { flex-basis:60%; }
 }
+
+/* Shared cloud workspace and account UI */
+.cloud-warning,.cloud-loading{margin:0 0 16px;padding:12px 14px;border-radius:8px;font-size:12px}
+.cloud-warning{background:#482020;color:#ffd5d5;border:1px solid #7b3a3a}
+.cloud-loading{background:#1b2112;color:#c5ff58;border:1px solid #394132}
+.auth-label{display:block;text-align:left;color:#c3c9ba;font-size:12px;margin:14px 0}
+.auth-label input{display:block;width:100%;margin-top:7px;padding:12px;border:1px solid #39432d;border-radius:7px;background:#090d07;color:#f4f5ef}
+.auth-link{display:block;margin:14px auto 0;border:0;background:transparent;color:#baff45;font-size:12px}
+.login-success{padding:10px;border-radius:7px;background:#1c3217;color:#d6ffbd;font-size:11px}
+.login-button:disabled{opacity:.65;cursor:wait}
