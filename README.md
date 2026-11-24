@@ -1,28 +1,52 @@
 # Cue Check
 
-Cue Check is a React + Vite application for recording media-team service readiness checks.
+Cue Check is a React + Vite media-readiness application with Supabase authentication and shared cloud records.
 
 ## Features
-- Email sign-in through the AppDeploy authentication client
-- Create and manage service checklists
-- Track checklist completion and notes
-- Review service check history
-- Export service reports as PDF, including checker details
+- Individual staff email/password sign-in
+- Shared service-check history across authorised staff and devices
+- Live updates for service records
+- Checklist templates and special-program templates
+- Service progress, notes, readiness status and PDF export
 - Light and dark appearance modes
+- Administrator role management for staff profiles
 
-## Run locally
+## Local development
 ```bash
 npm install
 npm run dev
 ```
 
-Build for production with `npm run build`.
+Create a local `.env` file with:
+```env
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
+```
 
-## Data storage
-The current app stores checklist records and appearance preferences in browser local storage. Data is browser/device-local; this version does not implement shared cloud database synchronization.
+Never put a Supabase secret or service-role key in frontend environment variables.
+
+## Supabase setup (required once)
+1. Open the Supabase project SQL Editor.
+2. Run `supabase/migrations/202611240001_cuecheck_shared_database.sql`.
+3. Run `supabase/migrations/202611240002_admin_role_management.sql`.
+4. In Supabase Authentication, invite the owner account (or create it using the approved account workflow).
+5. Promote the owner account by running this SQL with the exact account email:
+   ```sql
+   update public.cuecheck_profiles
+   set role = 'admin'
+   where email = 'owner@example.com';
+   ```
+6. Invite staff from Supabase Authentication > Users. Staff accounts receive the `staff` role automatically.
+7. In Vercel, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured for Production, Preview and Development, then redeploy.
+
+The first successful login on a browser that contains old Cue Check local data migrates that browser's saved checklist, special-program templates, settings and service checks into the shared database if the cloud workspace is still empty. Keep the old browser data until migration is verified.
+
+## Data and security
+- The Supabase publishable key is intended for browser use; database access is controlled by Row Level Security.
+- Do not expose database passwords, secret keys or service-role keys.
+- Authenticated staff can read and update shared service checks and shared checklist configuration.
+- Administrators can view staff profiles and change staff/admin roles.
+- Account invitations are issued from Supabase Authentication.
 
 ## Deployment
-The app was originally deployed with AppDeploy. The authentication integration imports `@appdeploy/client`; running outside AppDeploy may require the corresponding runtime and configuration.
-
-## Source
-Exported from AppDeploy app `cue-check-7ceooe`, source snapshot version `1795464972271`.
+Vercel is connected to this GitHub repository and deploys changes pushed to `main`.
