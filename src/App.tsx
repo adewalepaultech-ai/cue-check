@@ -763,8 +763,7 @@ function Workspace({ user }) {
                 />
               </label>
               <p className="saved">
-                <CheckCircle2 size={15} /> Changes save automatically on this
-                device.
+                <CheckCircle2 size={15} /> Changes save automatically and are shared with authorised staff.
               </p>
             </div>
           </>
