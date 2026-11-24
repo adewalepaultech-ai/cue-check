@@ -952,24 +952,71 @@ function Workspace({ user }) {
 function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [verifiedNotice, setVerifiedNotice] = useState(false);
   useEffect(() => {
     let alive = true;
     supabase.auth.getSession().then(({ data }) => {
       if (alive) { setSession(data.session); setAuthLoading(false); }
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+      if (event === 'SIGNED_IN' && window.location.hash.includes('type=signup')) setVerifiedNotice(true);
+    });
     return () => { alive = false; listener.subscription.unsubscribe(); };
   }, []);
   if (authLoading) return <div className="login-screen"><div className="login-card">Loading Cue Check…</div></div>;
-  return session ? <Workspace user={session.user} /> : <AuthScreen />;
+  if (recoveryMode) return <PasswordRecoveryScreen onComplete={() => setRecoveryMode(false)} />;
+  return session
+    ? <Workspace user={session.user} />
+    : <AuthScreen verifiedNotice={verifiedNotice} />;
 }
-function AuthScreen() {
-  const [email, setEmail] = useState('');
+function PasswordRecoveryScreen({ onComplete }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const submit = async event => {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    if (password.length < 8) { setError('Use a password with at least 8 characters.'); return; }
+    if (password !== confirmPassword) { setError('The passwords do not match.'); return; }
+    setBusy(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw updateError;
+      setMessage('Your password has been updated. You can now continue to Cue Check.');
+      setPassword('');
+      setConfirmPassword('');
+      window.setTimeout(() => onComplete(), 900);
+    } catch (e) {
+      setError(e.message || 'Unable to update your password. Please request a new reset email.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <div className="login-screen"><form className="login-card" onSubmit={submit}>
+    <div className="login-mark"><ShieldCheck size={28} /></div>
+    <small className="eyebrow">ACCOUNT SECURITY</small>
+    <h1>Set a new password</h1>
+    <p>Choose a new password for your Cue Check account.</p>
+    <label className="auth-label">New password<input type="password" required minLength={8} autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" /></label>
+    <label className="auth-label">Confirm new password<input type="password" required minLength={8} autoComplete="new-password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Enter password again" /></label>
+    {error && <div className="login-error">{error}</div>}
+    {message && <div className="login-success">{message}</div>}
+    <button className="primary login-button" disabled={busy}>{busy ? 'Updating…' : 'Update password'}</button>
+  </form></div>;
+}
+function AuthScreen({ verifiedNotice = false }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState(verifiedNotice ? 'Your email has been verified. You can now sign in.' : '');
   const [resetMode, setResetMode] = useState(false);
   const [signupMode, setSignupMode] = useState(false);
   const submit = async event => {
@@ -991,7 +1038,7 @@ function AuthScreen() {
         if (data.session) {
           setMessage('Your staff account has been created. You can now access Cue Check.');
         } else {
-          setMessage('Your account request has been received. Check your email for a confirmation link before signing in.');
+          setMessage('Your account request has been received. Check your email for a confirmation link. After verifying, return here to sign in.');
           setSignupMode(false);
           setPassword('');
           setConfirmPassword('');
