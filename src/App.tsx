@@ -20,6 +20,7 @@ import {
   Moon,
   LogOut,
   X,
+  Trash2,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { supabase } from './lib/supabase';
@@ -210,6 +211,17 @@ function Workspace({ user }) {
     const { error } = await supabase.from('cuecheck_profiles').update({ approval_status }).eq('id', id);
     if (error) setCloudError(error.message);
     else setStaffProfiles(list => list.map(profile => profile.id === id ? { ...profile, approval_status } : profile));
+  };
+  const deleteStaffAccount = async profile => {
+    if (!profile || profile.id === user.id || profile.role === 'admin') return;
+    const confirmed = window.confirm(`Permanently delete ${profile.email || 'this staff account'}? They will no longer be able to sign in. This cannot be undone.`);
+    if (!confirmed) return;
+    const { error } = await supabase.rpc('cuecheck_delete_user', { target_user_id: profile.id });
+    if (error) {
+      setCloudError(error.message || 'Could not delete this account.');
+      return;
+    }
+    setStaffProfiles(list => list.filter(item => item.id !== profile.id));
   };
   const pendingProfiles = staffProfiles.filter(profile => profile.approval_status === 'pending');
   useEffect(() => {
@@ -826,10 +838,15 @@ function Workspace({ user }) {
                       <b>{profile.email || profile.id}</b>
                       <small className={`approval-status ${profile.approval_status || 'pending'}`}>{profile.approval_status || 'pending'}</small>
                     </div>
-                    <select value={profile.role} onChange={event => changeStaffRole(profile.id, event.target.value)}>
+                    <select value={profile.role} onChange={event => changeStaffRole(profile.id, event.target.value)} disabled={profile.id === user.id || profile.role === 'admin'}>
                       <option value="staff">Staff</option>
                       <option value="admin">Administrator</option>
                     </select>
+                    {profile.role !== 'admin' && profile.id !== user.id && (
+                      <button className="remove" type="button" title="Delete staff account" aria-label={`Delete ${profile.email || 'staff account'}`} onClick={() => deleteStaffAccount(profile)}>
+                        <Trash2 size={16} /> Delete
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
