@@ -13,6 +13,7 @@ DROP POLICY IF EXISTS "Approved users can read shared checks" ON public.cuecheck
 DROP POLICY IF EXISTS "Approved users can create shared checks" ON public.cuecheck_checks;
 DROP POLICY IF EXISTS "Approved users can update shared checks" ON public.cuecheck_checks;
 DROP POLICY IF EXISTS "Approved users can delete shared checks" ON public.cuecheck_checks;
+DROP POLICY IF EXISTS "Admins can delete shared checks" ON public.cuecheck_checks;
 
 CREATE POLICY "Approved users can read shared checks"
 ON public.cuecheck_checks
@@ -30,9 +31,9 @@ FOR UPDATE TO authenticated
 USING (public.cuecheck_is_approved())
 WITH CHECK (public.cuecheck_is_approved());
 
-CREATE POLICY "Approved users can delete shared checks"
+CREATE POLICY "Admins can delete shared checks"
 ON public.cuecheck_checks
 FOR DELETE TO authenticated
-USING (public.cuecheck_is_approved());
+USING (public.cuecheck_is_admin());
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.cuecheck_checks TO authenticated;
