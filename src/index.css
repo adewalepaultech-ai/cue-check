@@ -944,3 +944,41 @@ button {
   .approval-row { align-items: flex-start; flex-wrap: wrap; }
   .approval-actions { width: 100%; }
 }
+
+
+/* Cue Check operations dashboard, audit, reports and recovery */
+.dashboard-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.audit-row { align-items: flex-start; }
+.audit-row > div:nth-child(2) { min-width: 0; flex: 1; }
+.audit-row small { display: block; margin-top: 5px; overflow-wrap: anywhere; }
+.staff-report-row { align-items: center; }
+.staff-report-info { flex: 1; min-width: 0; }
+.staff-report-info .progress-line { margin: 10px 0 0; }
+.backup-card { margin-bottom: 18px; }
+.backup-card h2 { font: 700 18px Manrope; margin: 0 0 8px; }
+.backup-card p, .backup-note { color: #9ba392; font-size: 12px; line-height: 1.6; }
+.backup-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0 10px; }
+.backup-upload { display: inline-flex; cursor: pointer; border: 1px solid #475a2c; border-radius: 7px; color: #caff70; padding: 11px 14px; font-size: 12px; font-weight: 700; }
+.backup-upload span { display: inline-flex; align-items: center; gap: 8px; }
+.backup-upload input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+.backup-note { display: block; font-size: 10px; }
+.shell.light .backup-card p, .shell.light .backup-note { color: #65705e; }
+.shell.light .backup-upload { color: #42620e; border-color: #b8c99f; }
+@media (max-width: 850px) {
+  .dashboard-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+  .dashboard-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .audit-row, .staff-report-row { align-items: flex-start; }
+  .audit-row .history-icon, .staff-report-row .history-icon { flex: 0 0 36px; }
+  .staff-report-row > strong { font-size: 13px; }
+  .backup-actions { align-items: stretch; flex-direction: column; }
+  .backup-actions .primary, .backup-upload { width: 100%; justify-content: center; }
+  .topbar { height: auto; min-height: 56px; align-items: flex-start; flex-direction: column; gap: 10px; padding: 12px 0; }
+  .top-right { width: 100%; flex-wrap: wrap; }
+  .user-email { max-width: 150px; }
+  .sidebar nav { padding-bottom: 4px; scrollbar-width: thin; }
+  .nav { min-height: 42px; }
+  .task { min-height: 58px; }
+  .task-check { width: 24px; height: 24px; }
+}
