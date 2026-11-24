@@ -7,7 +7,12 @@ Cue Check is a React + Vite media-readiness application with Supabase authentica
 - Shared service-check history across authorised staff and devices
 - Live updates for service records
 - Checklist templates and special-program templates
-- Service progress, notes, readiness status and PDF export
+- Service progress, notes, readiness status and detailed PDF export
+- Management dashboard with readiness, overdue and monthly metrics
+- Append-only activity history for checklist and service actions
+- Administrator staff performance reports with CSV export
+- Administrator JSON backup and merge-based recovery
+- Responsive mobile navigation and touch-friendly checklist controls
 - Light and dark appearance modes
 - Administrator role management for staff profiles
 
@@ -50,6 +55,8 @@ The first successful login on a browser that contains old Cue Check local data m
 - Approved staff can read shared checklist configuration but cannot create, edit or delete templates.
 - Approved staff can create and update shared service checks; administrators can also manage checklist templates.
 - Administrators can view staff profiles, approve or reject registrations, and change staff/admin roles.
+- Audit entries are append-only; staff can read their own entries and administrators can read all entries.
+- Backup restore updates matching record IDs and leaves other cloud records untouched. Keep downloaded backups in a secure location.
 - Account invitations are issued from Supabase Authentication.
 
 ## Deployment
