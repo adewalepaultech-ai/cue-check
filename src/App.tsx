@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { supabase } from './lib/supabase';
 
 const initialItems = [
   'Attendance',
@@ -63,7 +64,10 @@ const dateLabel = d =>
     month: 'short',
     year: 'numeric',
   });
-function App() {
+function Workspace({ user }) {
+  const [cloudReady, setCloudReady] = useState(false);
+  const [cloudError, setCloudError] = useState('');
+  const [accountRole, setAccountRole] = useState('staff');
   const [theme, setTheme] = useState(() => localStorage.getItem('cuecheck-theme') || 'dark');
   const [data, setData] = useState(() => ({
     items: initialItems,
@@ -90,7 +94,80 @@ function App() {
   const [programTasks, setProgramTasks] = useState('');
   const [editingProgramId, setEditingProgramId] = useState(null);
   const [templateItemsOverride, setTemplateItemsOverride] = useState(null);
-  useEffect(() => saveStore(data), [data]);
+  useEffect(() => {
+    let alive = true;
+    const loadCloud = async () => {
+      try {
+        const [{ data: config, error: configError }, { data: rows, error: checksError }, { data: profile }] = await Promise.all([
+          supabase.from('cuecheck_config').select('data').eq('id', true).maybeSingle(),
+          supabase.from('cuecheck_checks').select('id,payload').order('created_at', { ascending: false }),
+          supabase.from('cuecheck_profiles').select('role').eq('id', user.id).maybeSingle(),
+        ]);
+        if (configError) throw configError;
+        if (checksError) throw checksError;
+        if (!alive) return;
+        setAccountRole(profile?.role || 'staff');
+        const local = readStore();
+        if (!config && (!rows || rows.length === 0)) {
+          const seedConfig = {
+            items: local.items || initialItems,
+            settings: local.settings || { department: 'MEDIA DEPARTMENT', reminder: 'Start a check at least 60 minutes before doors open.' },
+            specialPrograms: local.specialPrograms || [],
+          };
+          const { error: seedError } = await supabase.from('cuecheck_config').upsert({ id: true, data: seedConfig, updated_by: user.id });
+          if (seedError) throw seedError;
+          if ((local.checks || []).length) {
+            const { error: seedChecksError } = await supabase.from('cuecheck_checks').upsert(
+              local.checks.map(check => ({ id: check.id, payload: { ...check, checkerEmail: check.checkerEmail || user.email || '' }, updated_by: user.id }))
+            );
+            if (seedChecksError) throw seedChecksError;
+            setData({ ...seedConfig, checks: local.checks });
+          } else {
+            setData({ ...seedConfig, checks: [] });
+          }
+        } else {
+          setData({
+            items: config?.data?.items || initialItems,
+            settings: config?.data?.settings || { department: 'MEDIA DEPARTMENT', reminder: 'Start a check at least 60 minutes before doors open.' },
+            specialPrograms: config?.data?.specialPrograms || [],
+            checks: (rows || []).map(row => row.payload).filter(Boolean),
+          });
+        }
+        setCloudReady(true);
+      } catch (error) {
+        if (alive) setCloudError(error.message || 'Could not load shared Cue Check data. Check that the Supabase SQL setup has been completed.');
+      }
+    };
+    loadCloud();
+    const channel = supabase.channel('cuecheck-live-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cuecheck_checks' }, async () => {
+        const { data: rows } = await supabase.from('cuecheck_checks').select('id,payload').order('created_at', { ascending: false });
+        if (alive && rows) setData(current => ({ ...current, checks: rows.map(row => row.payload).filter(Boolean) }));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cuecheck_config' }, async () => {
+        const { data: config } = await supabase.from('cuecheck_config').select('data').eq('id', true).maybeSingle();
+        if (alive && config?.data) setData(current => ({ ...current, ...config.data }));
+      })
+      .subscribe();
+    return () => { alive = false; supabase.removeChannel(channel); };
+  }, [user.id]);
+  useEffect(() => {
+    if (!cloudReady) return;
+    saveStore(data);
+    const persist = async () => {
+      const config = { items: data.items, settings: data.settings, specialPrograms: data.specialPrograms || [] };
+      const [{ error: configError }, { error: checksError }] = await Promise.all([
+        supabase.from('cuecheck_config').upsert({ id: true, data: config, updated_by: user.id }),
+        data.checks.length
+          ? supabase.from('cuecheck_checks').upsert(data.checks.map(check => ({ id: check.id, payload: { ...check, checkerEmail: check.checkerEmail || user.email || '' }, updated_by: user.id })))
+          : Promise.resolve({ error: null }),
+      ]);
+      if (configError || checksError) setCloudError((configError || checksError).message);
+      else setCloudError('');
+    };
+    const timer = window.setTimeout(persist, 350);
+    return () => window.clearTimeout(timer);
+  }, [data, cloudReady, user.id, user.email]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('cuecheck-theme', theme);
@@ -234,6 +311,8 @@ function App() {
         <div className="side-foot">SERVICE READINESS • v1.0</div>
       </aside>
       <main className="main">
+        {cloudError && <div className="cloud-warning">Cloud sync issue: {cloudError}</div>}
+        {!cloudReady && <div className="cloud-loading">Connecting to shared Cue Check workspace…</div>}
         <header className="topbar">
           <div className="crumb">
             MEDIA OPERATIONS <span>/</span> {page.toUpperCase()}
@@ -244,7 +323,8 @@ function App() {
               {theme === 'dark' ? 'Day mode' : 'Night mode'}
             </button>
             <span className="live-dot" />
-            <span className="user-email">Local device</span>
+            <span className="user-email">{user.email} · {accountRole}</span>
+            <button className="signout-btn" onClick={() => supabase.auth.signOut()}><LogOut size={14} /> Sign out</button>
           </div>
         </header>
         {page === 'Run a check' && !current && (
@@ -770,4 +850,55 @@ function App() {
     </div>
   );
 }
+
+function App() {
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (alive) { setSession(data.session); setAuthLoading(false); }
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    return () => { alive = false; listener.subscription.unsubscribe(); };
+  }, []);
+  if (authLoading) return <div className="login-screen"><div className="login-card">Loading Cue Check…</div></div>;
+  return session ? <Workspace user={session.user} /> : <AuthScreen />;
+}
+function AuthScreen() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [resetMode, setResetMode] = useState(false);
+  const submit = async event => {
+    event.preventDefault(); setBusy(true); setError(''); setMessage('');
+    try {
+      if (resetMode) {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+        if (resetError) throw resetError;
+        setMessage('Password reset instructions have been sent if this email is registered.');
+      } else {
+        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+        if (loginError) throw loginError;
+      }
+    } catch (e) { setError(e.message || 'Unable to sign in.'); }
+    finally { setBusy(false); }
+  };
+  return <div className="login-screen"><form className="login-card" onSubmit={submit}>
+    <div className="login-mark"><ShieldCheck size={28} /></div>
+    <small className="eyebrow">MEDIA READINESS</small>
+    <h1>Cue Check</h1>
+    <p>{resetMode ? 'Enter your account email and we will send password reset instructions.' : 'Sign in with your staff email and password to access shared service records.'}</p>
+    <label className="auth-label">Email address<input type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" /></label>
+    {!resetMode && <label className="auth-label">Password<input type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Your password" /></label>}
+    {error && <div className="login-error">{error}</div>}
+    {message && <div className="login-success">{message}</div>}
+    <button className="primary login-button" disabled={busy}>{busy ? 'Please wait…' : resetMode ? 'Send reset email' : 'Sign in'}</button>
+    <button type="button" className="auth-link" onClick={() => { setResetMode(v => !v); setError(''); setMessage(''); }}>{resetMode ? 'Back to sign in' : 'Forgot password?'}</button>
+    <small className="login-foot">Staff accounts are created by the Cue Check administrator.</small>
+  </form></div>;
+}
 export default App;
+
