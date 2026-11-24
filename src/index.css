@@ -982,3 +982,9 @@ button {
   .task { min-height: 58px; }
   .task-check { width: 24px; height: 24px; }
 }
+
+.history-entry { display: flex; align-items: center; gap: 6px; }
+.history-entry .history-row { flex: 1; min-width: 0; }
+.history-delete { flex: 0 0 auto; border: 1px solid #583b36; border-radius: 7px; color: #e89a8f; padding: 10px; }
+.shell.light .history-delete { border-color: #e5c8c3; color: #9a4037; }
+@media(max-width:620px) { .history-entry { align-items: stretch; } .history-entry .history-row { min-width: 0; } .history-delete { align-self: center; } }
