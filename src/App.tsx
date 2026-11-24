@@ -215,14 +215,22 @@ function Workspace({ user }) {
     return () => { alive = false; supabase.removeChannel(channel); };
   }, [accountRole, user.id]);
   const changeStaffRole = async (id, role) => {
+    const profile = staffProfiles.find(item => item.id === id);
     const { error } = await supabase.from('cuecheck_profiles').update({ role }).eq('id', id);
     if (error) setCloudError(error.message);
-    else setStaffProfiles(list => list.map(profile => profile.id === id ? { ...profile, role } : profile));
+    else {
+      setStaffProfiles(list => list.map(item => item.id === id ? { ...item, role } : item));
+      writeAudit('staff_role_changed', null, { email: profile?.email || '', role });
+    }
   };
   const changeApprovalStatus = async (id, approval_status) => {
+    const profile = staffProfiles.find(item => item.id === id);
     const { error } = await supabase.from('cuecheck_profiles').update({ approval_status }).eq('id', id);
     if (error) setCloudError(error.message);
-    else setStaffProfiles(list => list.map(profile => profile.id === id ? { ...profile, approval_status } : profile));
+    else {
+      setStaffProfiles(list => list.map(item => item.id === id ? { ...item, approval_status } : item));
+      writeAudit('staff_approval_changed', null, { email: profile?.email || '', approval_status });
+    }
   };
   const deleteStaffAccount = async profile => {
     if (!profile || profile.id === user.id || profile.role === 'admin') return;
@@ -234,6 +242,7 @@ function Workspace({ user }) {
       return;
     }
     setStaffProfiles(list => list.filter(item => item.id !== profile.id));
+    writeAudit('staff_account_deleted', null, { email: profile.email || '' });
   };
   const pendingProfiles = staffProfiles.filter(profile => profile.approval_status === 'pending');
   const writeAudit = async (action, checkId = null, details = {}) => {
@@ -866,6 +875,7 @@ function Workspace({ user }) {
                         ...d,
                         items: [...d.items, newItem.trim()],
                       }));
+                      writeAudit('checklist_item_added', null, { item: newItem.trim() });
                       setNewItem('');
                     }
                   }}
@@ -889,7 +899,8 @@ function Workspace({ user }) {
                         setData(d => ({
                           ...d,
                           items: d.items.filter((_, j) => j !== i),
-                        }))
+                        }));
+                        writeAudit('checklist_item_deleted', null, { item });
                       }
                     >
                       <X size={16} />
@@ -922,6 +933,7 @@ function Workspace({ user }) {
                   if (!programName.trim() || !tasks.length) return;
                   const item = { id: editingProgramId || crypto.randomUUID(), name: programName.trim(), items: tasks };
                   setData(d => ({ ...d, specialPrograms: editingProgramId ? (d.specialPrograms || []).map(p => p.id === editingProgramId ? item : p) : [...(d.specialPrograms || []), item] }));
+                  writeAudit(editingProgramId ? 'special_program_updated' : 'special_program_created', null, { name: item.name, taskCount: tasks.length });
                   setProgramName(''); setProgramTasks(''); setEditingProgramId(null);
                 }}><Plus size={16} /> {editingProgramId ? 'Save changes' : 'Save program'}</button>
                 {editingProgramId && <button className="quiet" onClick={() => { setEditingProgramId(null); setProgramName(''); setProgramTasks(''); }}>Cancel edit</button>}
@@ -939,7 +951,7 @@ function Workspace({ user }) {
                 <div className="program-info"><b>{p.name}</b><small>{p.items.length} checklist activities</small></div>
                 {accountRole === 'admin' && <button className="text-btn" onClick={() => { setEditingProgramId(p.id); setProgramName(p.name); setProgramTasks(p.items.join('\n')); }}>Edit</button>}
                 <button className="primary" onClick={() => { setService(p.name); setTemplateItemsOverride(p.items); setShowNew(true); }}>Use checklist</button>
-                {accountRole === 'admin' && <button className="remove" aria-label="Delete program" onClick={() => setData(d => ({ ...d, specialPrograms: (d.specialPrograms || []).filter(x => x.id !== p.id) }))}><X size={16} /></button>}
+                {accountRole === 'admin' && <button className="remove" aria-label="Delete program" onClick={() => { setData(d => ({ ...d, specialPrograms: (d.specialPrograms || []).filter(x => x.id !== p.id) })); writeAudit('special_program_deleted', null, { name: p.name }); }}><X size={16} /></button>}
               </div>
             ))}
           </>
