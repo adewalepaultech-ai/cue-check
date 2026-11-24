@@ -275,7 +275,11 @@ function Workspace({ user }) {
       ),
     }));
   const download = () => {
-    if (!current || !canFinalize) return;
+    if (!current) return;
+    if (!canFinalize) {
+      setNotice(`PDF download is locked. Complete at least 40% of this checklist first. Your current progress is ${pct}%.`);
+      return;
+    }
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const left = 16;
     const width = 178;
@@ -541,10 +545,12 @@ function Workspace({ user }) {
               {!current.ready && (
                 <button
                   className="primary ready-btn"
-                  disabled={!canFinalize}
                   title={!canFinalize ? 'Complete at least 40% of the checklist first.' : 'Mark this service ready'}
                   onClick={() => {
-                    if (!canFinalize) return;
+                    if (!canFinalize) {
+                      setNotice(`Service readiness is locked. Complete at least 40% of this checklist first. Your current progress is ${pct}%.`);
+                      return;
+                    }
                     updateCheck({
                       ready: true,
                       completedAt: new Date().toISOString(),
@@ -606,7 +612,7 @@ function Workspace({ user }) {
                 Checked by <b>{current.checker}</b>
                 {!canFinalize && <small className="threshold-hint">Complete at least 40% to unlock service readiness and PDF download.</small>}
               </span>
-              <button className="primary" onClick={download} disabled={!canFinalize} title={!canFinalize ? 'Complete at least 40% of the checklist first.' : 'Download service report'}>
+              <button className="primary" onClick={download} title={!canFinalize ? 'Complete at least 40% of the checklist first.' : 'Download service report'}>
                 <Download size={16} /> Download PDF
               </button>
             </div>
@@ -894,6 +900,21 @@ function Workspace({ user }) {
               Begin check <ChevronRight size={16} />
             </button>
           </form>
+        </div>
+      )}
+      {notice && (
+        <div className="modal-backdrop" onClick={() => setNotice('')}>
+          <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="threshold-title" onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <small className="eyebrow">ACTION REQUIRED</small>
+                <h2 id="threshold-title">40% completion required</h2>
+                <p>{notice}</p>
+              </div>
+              <button type="button" className="icon-btn" aria-label="Close message" onClick={() => setNotice('')}><X /></button>
+            </div>
+            <button type="button" className="primary full" onClick={() => setNotice('')}>I understand</button>
+          </div>
         </div>
       )}
       <div className="print-report">
