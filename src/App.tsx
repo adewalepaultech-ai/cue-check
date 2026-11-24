@@ -108,6 +108,11 @@ function Workspace({ user }) {
     sessionStorage.setItem('cuecheck-page', page);
   }, [page]);
   useEffect(() => {
+    if (accountRole && accountRole !== 'admin' && page === 'Activity log') {
+      setPage('Dashboard');
+    }
+  }, [accountRole, page]);
+  useEffect(() => {
     let alive = true;
     const loadCloud = async () => {
       try {
@@ -501,7 +506,7 @@ function Workspace({ user }) {
             ['Checklist', ListChecks],
             ['Special Programs', CalendarDays],
             ['Settings', Settings],
-          ].filter(([n]) => n !== 'Staff reports' || accountRole === 'admin').map(([n, I]) => (
+          ].filter(([n]) => (n !== 'Staff reports' && n !== 'Activity log') || accountRole === 'admin').map(([n, I]) => (
             <button
               type="button"
               className={page === n ? 'nav active' : 'nav'}
@@ -560,7 +565,7 @@ function Workspace({ user }) {
             {!data.checks.length && <div className="empty"><ClipboardCheck size={28} /><h3>No service data yet</h3><p>Start the first service check to populate this dashboard.</p><button className="primary" onClick={() => { go('Run a check'); setShowNew(true); }}>Start a check</button></div>}
           </>
         )}
-        {page === 'Activity log' && (
+        {page === 'Activity log' && accountRole === 'admin' && (
           <>
             <div className="page-title"><small className="eyebrow">AUDIT TRAIL</small><h1>Activity history</h1><p>Records of service starts, checklist changes, readiness decisions and backup actions.</p></div>
             {auditEvents.length ? auditEvents.map(event => <div className="history-row audit-row" key={event.id}><div className="history-icon"><Activity size={18} /></div><div><b>{String(event.action || '').replaceAll('_', ' ')}</b><small>{event.actor_email || 'Staff'} · {new Date(event.created_at).toLocaleString()}</small>{event.details?.task && <small>Task: {event.details.task}</small>}{event.details?.service && <small>Service: {event.details.service}</small>}</div></div>) : <div className="empty"><ClipboardList size={28} /><h3>No activity events yet</h3><p>Activity appears as staff use Cue Check. Apply the audit migration in Supabase first.</p></div>}
