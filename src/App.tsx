@@ -7,6 +7,7 @@ import {
   Users,
   Database,
   FileSpreadsheet,
+  UploadCloud,
   Check,
   CheckCircle2,
   ChevronRight,
