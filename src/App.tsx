@@ -895,13 +895,13 @@ function Workspace({ user }) {
                   {accountRole === 'admin' && (
                     <button
                       className="remove"
-                      onClick={() =>
+                      onClick={() => {
                         setData(d => ({
                           ...d,
                           items: d.items.filter((_, j) => j !== i),
                         }));
                         writeAudit('checklist_item_deleted', null, { item });
-                      }
+                      }}
                     >
                       <X size={16} />
                     </button>
